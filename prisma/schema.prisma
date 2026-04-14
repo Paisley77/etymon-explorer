@@ -1,0 +1,90 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js" // generates a javascript client library
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Word {
+  id            String @id @default(cuid())
+  word          String
+  language      String
+  era           String
+  definition    String
+  etymology     String @db.Text
+  partOfSpeech  String
+  firstRecorded Int?
+  lastRecorded  Int?
+  frequency     Float?
+
+  // Graph relationships
+  parentId String?
+  parent   Word?   @relation("WordAncestry", fields: [parentId], references: [id])
+  children Word[]  @relation("WordAncestry")
+
+  // Metadata
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  verifiedByAI Boolean  @default(false)
+  aiConfidence Float?
+
+  // Relations to edges
+  outgoingEdges EtymologyEdge[] @relation("SourceEdge")
+  incomingEdges EtymologyEdge[] @relation("TargetEdge")
+
+  // Relation to UserDiscovery 
+  discoveries UserDiscovery[]
+
+  // Indexes for performance
+  @@unique([word, language])
+  @@index([word])
+  @@index([language])
+  @@index([era])
+}
+
+model EtymologyEdge {
+  id               String @id @default(cuid())
+  sourceId         String
+  targetId         String
+  relationshipType String
+  confidence       Float
+  yearOfTransition Int?
+
+  source Word @relation("SourceEdge", fields: [sourceId], references: [id])
+  target Word @relation("TargetEdge", fields: [targetId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sourceId, targetId, relationshipType])
+  @@index([sourceId])
+  @@index([targetId])
+}
+
+model UserDiscovery {
+  id     String @id @default(cuid())
+  wordId String
+  word   Word   @relation(fields: [wordId], references: [id])
+
+  // For community lexicon feature
+  discoveredAt  DateTime @default(now())
+  sessionId     String // Anonymous user tracking
+  viewportState Json? // Store where user left off
+
+  @@index([sessionId])
+  @@index([wordId])
+}
+
+model CachedAIResponse {
+  id         String   @id @default(cuid())
+  queryHash  String   @unique // Hash of the prompt
+  prompt     String   @db.Text
+  response   Json
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  usageCount Int      @default(1)
+
+  @@index([queryHash])
+}
